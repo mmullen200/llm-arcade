@@ -16,3 +16,7 @@ The Workshop (title screen) lets you build an LLM from the parts: rebuild real m
 - `skill/` is the `llm-arcade` Claude skill, which turns Sebastian Raschka's LLM architecture diagrams into new cartridges. It bundles its own copy of the app in `skill/assets/app/`.
 
 Architectures follow the LLM diagrams by Sebastian Raschka ([The Big LLM Architecture Comparison](https://magazine.sebastianraschka.com/p/the-big-llm-architecture-comparison)). This is a fan-made learning toy and is not affiliated with him.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
