@@ -1,0 +1,43 @@
+LLMArcade.register({
+  "id": "olmo2-7b",
+  "name": "OLMo 2 7B",
+  "maker": "Allen AI",
+  "year": 2024,
+  "cartColor": "#ffccaa",
+  "tagline": "The fully open model (weights, data and code) that moved its norms to after each sub-layer.",
+  "source": "Sebastian Raschka, The Big LLM Architecture Comparison (OLMo 2 diagram)",
+  "d": 4096,
+  "vocab": 100278,
+  "stats": [["PARAMS", "7B"], ["LAYERS", "32"], ["DIM", "4,096"], ["CTX", "4K"]],
+  "intro": "OLMo 2 looks like Llama until you check where the norms sit. Llama normalizes before attention and the FFN; OLMo 2 normalizes after them, inside the skip connection. Compare it with Gemma 3, which does both.",
+  "blocks": [{ "id": "main", "repeat": 32, "label": "TRANSFORMER BLOCK" }],
+  "pieces": [
+    { "id": "tok", "kind": "tokenizer", "name": "BPE Tokenizer", "facts": [["Vocabulary", "~100K tokens (cl100k-based)"]] },
+    { "id": "emb", "kind": "embedding", "name": "Token Embedding", "facts": [["Table size", "~100K x 4,096"], ["Tied?", "No"]] },
+    { "id": "attn", "kind": "attention", "block": "main", "name": "Multi-Head Attn + QK-Norm", "variant": "mha", "heads": 32, "kvHeads": 32, "rope": true, "qkNorm": true,
+      "detail": "Classic multi-head attention: 32 query heads, each with its own key and value head (no GQA). Queries and keys pass through an RMSNorm before their dot product (QK-norm, the teal plates), which keeps attention scores from spiking during training. Notice there's no norm in front of this unit: the vector goes straight in.",
+      "facts": [["Query heads", "32"], ["K/V heads", "32 (no sharing)"], ["Extras", "QK-norm, RoPE"], ["Norm before it?", "None"]],
+      "special": "No pre-norm here. OLMo 2's norms come after the sub-layer instead. And with 32 K/V heads it keeps full multi-head attention, unlike Llama 3's 8." },
+    { "id": "post1", "kind": "norm", "block": "main", "name": "Post-Attn RMSNorm", "variant": "rmsnorm",
+      "detail": "OLMo 2 normalizes the attention output before it's added back to the skip path. The skip path itself is never normalized, which keeps a clean highway for the original signal. This made training more stable for the AI2 team.",
+      "facts": [["Type", "RMSNorm"], ["Placement", "After attention, inside the residual"]],
+      "special": "Post-norm, OLMo style. The original 2017 Transformer also normalized after each sub-layer, but outside the skip connection. OLMo 2 puts it inside, so the residual stream stays untouched." },
+    { "id": "add1", "kind": "add", "block": "main", "residualFrom": "attn", "name": "Residual Add 1" },
+    { "id": "ffn", "kind": "ffn", "block": "main", "name": "SwiGLU Feed-Forward", "variant": "swiglu", "hidden": 11008,
+      "facts": [["Shape", "4,096 -> 11,008 -> 4,096"], ["Activation", "SiLU-gated (SwiGLU)"]] },
+    { "id": "post2", "kind": "norm", "block": "main", "name": "Post-FFN RMSNorm", "variant": "rmsnorm",
+      "facts": [["Type", "RMSNorm"], ["Placement", "After the FFN, inside the residual"]] },
+    { "id": "add2", "kind": "add", "block": "main", "residualFrom": "ffn", "name": "Residual Add 2" },
+    { "id": "normf", "kind": "norm", "name": "Final RMSNorm", "variant": "rmsnorm" },
+    { "id": "head", "kind": "lmhead", "name": "LM Head", "facts": [["Shape", "4,096 -> ~100K"]] },
+    { "id": "sample", "kind": "sampler", "name": "Softmax + Sampler" }
+  ],
+  "quiz": [
+    { "type": "choice", "piece": "post1", "q": "Where does OLMo 2 put its RMSNorm layers inside each block?", "options": ["Before attention and the FFN (pre-norm)", "After attention and the FFN, inside the skip connection", "Both before and after, like Gemma 3", "It has no norms"], "answer": 1, "explain": "Post-norm inside the residual: x + Norm(Attention(x)). Llama is pre-norm, and Gemma 3 does both." },
+    { "type": "find", "q": "Click the norm that sits right AFTER attention.", "answer": "post1", "explain": "The Post-Attn RMSNorm. It normalizes the attention output before the skip path adds it back." },
+    { "type": "choice", "piece": "attn", "q": "OLMo 2 7B has 32 query heads. How many key/value heads?", "options": ["1", "8", "32", "64"], "answer": 2, "explain": "32: plain multi-head attention, no grouping. Llama 3 8B, the same size, uses only 8." },
+    { "type": "find", "q": "Click the piece where the vector goes in WITHOUT being normalized first, unlike in Llama.", "answer": "attn", "explain": "The attention unit. In OLMo 2 nothing sits in front of it; the norm comes after." },
+    { "type": "choice", "piece": "attn", "q": "What does QK-norm protect against?", "options": ["Attention scores blowing up during training", "Running out of vocabulary", "Tokens being too short", "Experts getting overloaded"], "answer": 0, "explain": "Normalizing queries and keys keeps their dot products in a sane range, which stabilizes training." },
+    { "type": "choice", "q": "What makes OLMo 2 special beyond its architecture?", "options": ["Its weights, training data and training code are all public", "It's the largest model ever", "It has no tokenizer", "It only works in English letters"], "answer": 0, "explain": "AI2 released everything, which makes OLMo a favorite for research and for learning how LLMs are really trained." }
+  ]
+});

@@ -1,0 +1,8 @@
+{
+  "skill_name": "llm-arcade",
+  "evals": [
+    { "id": 1, "prompt": "Here's Raschka's diagram of Kimi K2 from his architecture comparison post. Add it to my LLM arcade as a new level.", "expected_output": "models/kimi-k2.js (MLA attention, MoE with 384 experts / 8 active / 1 shared, 61 layers incl. 1 dense first layer as a separate block), manifest updated, validator passes, quiz with >=2 find questions.", "files": [] },
+    { "id": 2, "prompt": "can you make OLMo 2 7B playable in the arcade thing? i want to understand why its norms are placed differently", "expected_output": "models/olmo2-7b.js with post-norm placement (norm after attention/FFN, inside the residual), QK-norm, MHA; 'special' text explaining norm placement vs Llama; validator passes.", "files": [] },
+    { "id": 3, "prompt": "I want a gamey interactive version of Qwen3-Next's hybrid architecture so my team can poke at it. Use the LLM arcade style.", "expected_output": "Copies the app if none exists; models/qwen3-next-80b-a3b.js using one block containing 3 Gated DeltaNet (custom) layers + 1 gated attention layer, repeat = layers/4, MoE with shared expert; honest custom-piece text; validator passes.", "files": [] }
+  ]
+}

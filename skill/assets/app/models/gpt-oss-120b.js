@@ -1,0 +1,41 @@
+LLMArcade.register({
+  "id": "gpt-oss-120b",
+  "name": "gpt-oss-120b",
+  "maker": "OpenAI",
+  "year": 2025,
+  "cartColor": "#00e436",
+  "tagline": "OpenAI's open-weight MoE: wide-and-shallow, with alternating sliding-window layers and attention sinks.",
+  "source": "Sebastian Raschka, From GPT-2 to gpt-oss (architecture comparison)",
+  "d": 2880,
+  "vocab": 201088,
+  "stats": [["TOTAL", "117B"], ["ACTIVE", "5.1B"], ["LAYERS", "36"], ["EXPERTS", "128"]],
+  "intro": "Compare this one with the GPT-2 cartridge, from the same lab 6 years later. Attention alternates between sliding-window and full layers, and the FFN became a 128-expert MoE.",
+  "blocks": [{ "id": "main", "repeat": 36, "label": "MoE TRANSFORMER BLOCK" }],
+  "pieces": [
+    { "id": "tok", "kind": "tokenizer", "name": "o200k Tokenizer", "facts": [["Vocabulary", "~201K tokens"], ["Format", "Harmony chat format"]] },
+    { "id": "emb", "kind": "embedding", "name": "Token Embedding", "facts": [["Width", "2,880"]] },
+    { "id": "norm1", "kind": "norm", "block": "main", "name": "RMSNorm 1", "variant": "rmsnorm" },
+    { "id": "attn", "kind": "attention", "block": "main", "name": "Alternating Attention", "variant": "alternating", "heads": 64, "kvHeads": 8, "rope": true, "sinks": true, "window": 128, "windowShow": 2,
+      "detail": "Layers alternate: one layer uses a tiny 128-token sliding window, the next uses full attention. Each head also has a learned attention sink, a bias that lets it put attention weight on nothing in particular. That stabilizes long-context behavior. 64 query heads share 8 K/V heads (GQA), and the projections keep bias terms, a GPT-2 throwback.",
+      "facts": [["Pattern", "Sliding (128) / full, alternating"], ["Query heads", "64"], ["K/V heads", "8"], ["Extras", "Attention sinks, RoPE, biases"]],
+      "special": "Press RUN: layer 1 only beams to the newest cache slots (sliding), layer 2 beams to all of them (full). The black cube on the corner is the attention sink." },
+    { "id": "add1", "kind": "add", "block": "main", "residualFrom": "norm1", "name": "Residual Add 1" },
+    { "id": "norm2", "kind": "norm", "block": "main", "name": "RMSNorm 2", "variant": "rmsnorm" },
+    { "id": "moe", "kind": "moe", "block": "main", "name": "MoE: 128 Experts, Top-4", "experts": 128, "active": 4, "shared": false,
+      "facts": [["Experts", "128"], ["Active per token", "4"], ["Shared expert", "None"], ["Weights", "MXFP4 4-bit quantized"]],
+      "special": "Fewer, bigger active experts (4) than Qwen3 or DeepSeek (8). The 4-bit MXFP4 expert weights let the 120B model fit on a single 80GB GPU." },
+    { "id": "add2", "kind": "add", "block": "main", "residualFrom": "norm2", "name": "Residual Add 2" },
+    { "id": "normf", "kind": "norm", "name": "Final RMSNorm", "variant": "rmsnorm" },
+    { "id": "head", "kind": "lmhead", "name": "LM Head", "facts": [["Shape", "2,880 -> ~201K"]] },
+    { "id": "sample", "kind": "sampler", "name": "Softmax + Sampler" }
+  ],
+  "quiz": [
+    { "type": "choice", "piece": "attn", "q": "How does gpt-oss mix sliding-window and full attention?", "options": ["Every layer is full attention", "They alternate layer by layer", "5 local layers per 1 global, like Gemma 3", "Only the last layer is full"], "answer": 1, "explain": "Alternating: sliding (128 tokens), full, sliding, full..." },
+    { "type": "choice", "piece": "attn", "q": "What is an attention sink?", "options": ["A learned slot a head can dump attention onto when nothing is relevant", "A place where deleted tokens go", "The KV cache", "A type of tokenizer"], "answer": 0, "explain": "Sinks give softmax somewhere harmless to put weight, which stabilizes attention over long contexts." },
+    { "type": "choice", "piece": "moe", "q": "How many experts does each token use in gpt-oss-120b?", "options": ["2", "4", "8", "128"], "answer": 1, "explain": "Top-4 of 128." },
+    { "type": "choice", "q": "Compared with Qwen3 235B (94 layers), gpt-oss-120b is...", "options": ["Wide and shallow: 36 layers", "Narrow and deep: 200 layers", "Exactly the same shape", "A single layer"], "answer": 0, "explain": "36 layers. Fewer layers parallelize better at inference; deeper models can build more abstractions. It's a real design trade-off." },
+    { "type": "find", "q": "Click the piece where the router picks 4 experts.", "answer": "moe", "explain": "The MoE layer." },
+    { "type": "find", "q": "Click the piece with the attention sink (the little black cube).", "answer": "attn", "explain": "Alternating Attention. Each head has a learned sink logit." },
+    { "type": "choice", "piece": "moe", "q": "Why are the expert weights stored in 4-bit MXFP4?", "options": ["So the whole 120B model fits on a single 80GB GPU", "To make training impossible", "Because tokens are 4 bits", "No reason"], "answer": 0, "explain": "Experts are most of the weights, so quantizing them gives the biggest memory win." }
+  ]
+});

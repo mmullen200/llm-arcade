@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=37">
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="labels"></div>
+
+<!-- HUD -->
+<div id="hud" hidden>
+  <div id="topbar">
+    <button class="pbtn small" id="btn-levels" title="Back to level select">&lt; LEVELS</button>
+    <div id="cart-name"></div>
+    <div id="xpbox"><span id="lv">LV 1</span><div id="xpbar"><div id="xpfill"></div></div></div>
+    <div id="coins">C 0</div>
+    <div id="hearts"></div>
+    <button class="pbtn small" id="btn-pix" title="Pixel size: chunky pixels shimmer more when you rotate">PX: CHUNKY</button>
+    <button class="pbtn small icon" id="btn-sound" title="Sound on/off">SND</button>
+    <button class="pbtn small icon" id="btn-help" title="Controls &amp; legend">?</button>
+  </div>
+  <div id="tokens"></div>
+  <div id="tools">
+    <button class="pbtn gold" id="btn-build" title="Back to building">&lt; BUILD</button>
+    <button class="pbtn" id="btn-flow" title="Send a token through the model (Space)">&#9654; RUN</button>
+    <button class="pbtn" id="btn-mode" title="STEP waits for you at each stop; AUTO moves on after you have had time to read">MODE: STEP</button>
+    <button class="pbtn" id="btn-speed" title="Flow speed">SPD x1</button>
+    <button class="pbtn" id="btn-follow" title="Camera follows the token">CAM: FREE</button>
+    <button class="pbtn" id="btn-recenter" title="Reset the camera to the full view (R)">RECENTER</button>
+    <button class="pbtn gold" id="btn-quest" title="Answer questions about this model (Q)">&#9733; QUEST</button>
+  </div>
+  <aside id="inspector" hidden></aside>
+  <div id="dialog">
+    <div id="portrait"></div>
+    <div id="dialog-body">
+      <div id="dialog-name"></div>
+      <div id="dialog-text"></div>
+    </div>
+    <button class="pbtn small gold" id="dlg-next" hidden>NEXT &#9660;</button>
+  </div>
+  <div id="findbar" hidden></div>
+</div>
+
+<!-- Title / level select -->
+<div id="title">
+  <div class="title-inner">
+    <h1 class="logo">LLM<span>ARCADE</span></h1>
+    <p class="subtitle">Pick a cartridge. Every piece of the model is a block you can inspect and quiz yourself on. Then press RUN and watch a token travel through the machine.</p>
+    <button id="btn-workshop" class="ws-banner"><span class="t">&#9874; THE WORKSHOP</span><span class="d">Build your own LLM out of the parts. Rebuild real models from blueprints, or invent one in the sandbox.</span><span class="go">ENTER &gt;</span></button>
+    <div id="carts"></div>
+    <p class="credit">Architectures follow the LLM diagrams by Sebastian Raschka (<a href="https://magazine.sebastianraschka.com/p/the-big-llm-architecture-comparison" target="_blank" rel="noopener">The Big LLM Architecture Comparison</a>). This is a fan-made learning toy and is not affiliated with him.</p>
+  </div>
+</div>
+
+<div id="modal" hidden></div>
+<div id="help" hidden></div>
+<div id="toasts"></div>
+<div id="loading">LOADING<span class="blink">_</span></div>
+
+<script src="models/manifest.js?v=37"></script>
+<script src="engine.js?v=37"></script>
+<script src="workshop.js?v=37"></script>
+</body>
+</html>

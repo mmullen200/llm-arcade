@@ -1,0 +1,42 @@
+LLMArcade.register({
+  "id": "qwen3-235b-a22b",
+  "name": "Qwen3 235B-A22B",
+  "maker": "Alibaba Qwen",
+  "year": 2025,
+  "cartColor": "#ffa300",
+  "tagline": "235B parameters of knowledge, but each token only uses 22B. Mixture-of-Experts!",
+  "source": "Sebastian Raschka, The Big LLM Architecture Comparison (Qwen3 MoE diagram)",
+  "d": 4096,
+  "vocab": 151936,
+  "stats": [["TOTAL", "235B"], ["ACTIVE", "22B"], ["LAYERS", "94"], ["EXPERTS", "128"]],
+  "intro": "Qwen3's big model swaps the feed-forward for a Mixture-of-Experts room: 128 experts, and a router that picks 8 for each token. Watch the router light up the cabinets when you press RUN.",
+  "blocks": [{ "id": "main", "repeat": 94, "label": "MoE TRANSFORMER BLOCK" }],
+  "pieces": [
+    { "id": "tok", "kind": "tokenizer", "name": "BPE Tokenizer", "facts": [["Vocabulary", "~151K tokens"]] },
+    { "id": "emb", "kind": "embedding", "name": "Token Embedding", "facts": [["Width", "4,096"]] },
+    { "id": "norm1", "kind": "norm", "block": "main", "name": "RMSNorm 1", "variant": "rmsnorm" },
+    { "id": "attn", "kind": "attention", "block": "main", "name": "GQA + QK-Norm", "variant": "gqa", "heads": 64, "kvHeads": 4, "rope": true, "qkNorm": true,
+      "detail": "Grouped-Query Attention with 64 query heads sharing just 4 K/V heads (16 per group). Queries and keys each pass through an RMSNorm before their dot product (QK-norm, the teal plates on the side), which keeps attention scores from blowing up during training.",
+      "facts": [["Query heads", "64"], ["K/V heads", "4"], ["Extras", "QK-norm, RoPE"]],
+      "special": "Very aggressive K/V sharing: 16 query heads per K/V head keeps the cache small for a 94-layer model." },
+    { "id": "add1", "kind": "add", "block": "main", "residualFrom": "norm1", "name": "Residual Add 1" },
+    { "id": "norm2", "kind": "norm", "block": "main", "name": "RMSNorm 2", "variant": "rmsnorm" },
+    { "id": "moe", "kind": "moe", "block": "main", "name": "MoE: 128 Experts", "experts": 128, "active": 8, "shared": false,
+      "detail": "Each expert is a small SwiGLU feed-forward network. The router (yellow box with the antenna) scores all 128 experts for the current token and only the top 8 run. Their outputs are combined using the router's weights.",
+      "facts": [["Experts", "128"], ["Active per token", "8"], ["Shared expert", "None"], ["Expert type", "SwiGLU FFN"]],
+      "special": "Unlike DeepSeek V3, Qwen3 dropped the always-on shared expert. Every expert has to earn its spot through the router." },
+    { "id": "add2", "kind": "add", "block": "main", "residualFrom": "norm2", "name": "Residual Add 2" },
+    { "id": "normf", "kind": "norm", "name": "Final RMSNorm", "variant": "rmsnorm" },
+    { "id": "head", "kind": "lmhead", "name": "LM Head", "facts": [["Shape", "4,096 -> ~151K"]] },
+    { "id": "sample", "kind": "sampler", "name": "Softmax + Sampler" }
+  ],
+  "quiz": [
+    { "type": "choice", "piece": "moe", "q": "Qwen3 235B-A22B has 235B parameters, but how many are used for each token?", "options": ["All 235B", "About 22B", "About 1B", "It varies randomly from 0 to 235B"], "answer": 1, "explain": "A22B means about 22 billion active parameters: the shared parts plus 8 of the 128 experts." },
+    { "type": "choice", "piece": "moe", "q": "How many experts does the router pick for each token?", "options": ["1", "2", "8", "128"], "answer": 2, "explain": "Top-8 out of 128." },
+    { "type": "choice", "piece": "moe", "q": "Does Qwen3's MoE have a shared expert that every token always uses?", "options": ["Yes, one", "Yes, eight", "No"], "answer": 2, "explain": "No shared expert. DeepSeek V3 has one; Qwen3 removed it." },
+    { "type": "find", "q": "Click the room of expert cabinets.", "answer": "moe", "explain": "The MoE layer replaces the single feed-forward network." },
+    { "type": "find", "q": "Click the unit where 64 query heads share only 4 key/value heads.", "answer": "attn", "explain": "The GQA + QK-Norm attention unit. 16 query heads per K/V head." },
+    { "type": "choice", "piece": "attn", "q": "What does QK-norm do?", "options": ["Normalizes queries and keys before computing attention scores", "Removes the KV cache", "Counts the tokens", "Picks experts"], "answer": 0, "explain": "An RMSNorm on Q and K keeps their dot products in a stable range." },
+    { "type": "choice", "q": "Why use Mixture-of-Experts at all?", "options": ["Huge total capacity, but each token only pays for a few experts", "It makes the model smaller on disk", "It removes the need for attention", "It's required for tokenization"], "answer": 0, "explain": "More knowledge stored, about the same compute per token as a much smaller dense model. The trade-off is that all experts still have to sit in memory." }
+  ]
+});
