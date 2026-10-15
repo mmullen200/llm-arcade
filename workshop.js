@@ -1,6 +1,7 @@
 /* LLM Arcade workshop: build an LLM out of the parts you've been inspecting.
  * BLUEPRINTS: rebuild a real cartridge slot by slot. Each empty slot describes its job; the player picks the part,
- *   then its type (GQA or MHA? RMSNorm or LayerNorm?). Hints reveal a slot, stars reward few hints and mistakes.
+ *   then its type (GQA or MHA? RMSNorm or LayerNorm?). HINT gives three nudges per slot before showing the answer;
+ *   stars reward few hints, no answers and few mistakes.
  * FREE BUILD: a sandbox. A foreman checks the wiring as you go, meters show size / active size / KV cache,
  *   a "looks like" detector says which cartridge your design resembles and what would make it match, and challenges
  *   give goals. Any cartridge can be remixed as a starting point.
@@ -27,6 +28,42 @@ LLMArcade.workshop = function (api) {
     lmhead: 'Scores every word in the vocabulary as the possible next token.',
     sampler: 'Turns the scores into probabilities and picks the next token.',
   };
+  // HINT ladders: three nudges that get closer each time, then a fourth press shows the answer.
+  // Nudge 1 points at the problem, nudge 2 at how the part works, nudge 3 at what it looks like in 3D.
+  const HINTS = {
+    tokenizer: ['Think about the very first thing that happens to text. The model can\'t read letters.', 'This part splits text into pieces. A rare word can become two or three pieces.', 'It\'s the orange machine with a hopper on top: words drop in, numbered chunks come out.'],
+    embedding: ['Right now each token is just an ID number, and a number like #9246 doesn\'t mean anything yet.', 'This part is a giant lookup table with one row of numbers for every word in the vocabulary.', 'It\'s the bookshelf of colored cubes: the token\'s ID picks a row, and that row becomes its vector.'],
+    posenc: ['Attention alone can\'t tell word order: "dog bites man" would look the same as "man bites dog".', 'This model fixes that with a learned table, one entry per seat in the sentence, added onto each vector.', 'It\'s the clock box. Newer models skip it and rotate Q and K with RoPE instead.'],
+    norm: ['After dozens of layers, the numbers in a vector can blow up or shrink to almost nothing.', 'This part keeps the vector\'s overall size steady, like a volume limiter. Models use several of them.', 'It\'s the teal plate with equalizer bars that level out. Look for one next to each big sub-layer.'],
+    attention: ['So far every token has been handled on its own. Something has to let the words talk to each other.', 'This part compares the token\'s query with earlier tokens\' keys, then blends in their values.', 'It\'s the blue unit with the KV-cache rack behind it: the "look back at the context" part.'],
+    add: ['Something just changed the vector. What happened to the original copy from before that step?', 'The original copy took a shortcut around the sub-layer. This slot merges the two paths back together.', 'It\'s the small yellow node where the gold bypass pipe rejoins. It does a single + operation.'],
+    ffn: ['Attention gathered context from the other tokens. Now this token needs time to process it privately.', 'This part makes the vector several times wider, runs it through an activation, then shrinks it back.', 'It\'s the green unit with a fan. Most of a dense model\'s parameters live in it.'],
+    moe: ['This model is huge in total, but each token only uses a small slice of it.', 'A small router scores many specialist networks, and only the top few run for this token.', 'It\'s the grid of pink cabinets with a router box. It takes the place of the usual single feed-forward.'],
+    lmhead: ['The layers are done. The final vector now has to become a guess about the next word.', 'This part gives every word in the vocabulary a score, with one big matrix multiply.', 'It\'s the red panel of bars: one bar for every possible next token.'],
+    sampler: ['Scores aren\'t a decision yet. Something has to choose.', 'This part turns the scores into probabilities, draws one token, and feeds it back in.', 'It\'s the slot machine at the very end of the line.'],
+  };
+  const FLAVOR_HINTS = {
+    attention: {
+      mha: ['Check this model\'s K/V heads: does it have fewer of them than query heads?', 'It doesn\'t: all {heads} query heads have their own keys and values. No sharing.', 'Pick the original type, the one whose description says every head gets its own K and V.'],
+      gqa: ['Check this model\'s K/V heads: does it have fewer of them than query heads?', 'Yes: {heads} query heads share just {kv} K/V heads, in groups.', 'Pick the type named after grouping the queries.'],
+      mla: ['This model shrinks its KV cache, but not by having fewer heads.', 'It compresses K and V into one small vector before caching them.', 'Pick the type with "latent" in its name.'],
+      sliding: ['Think about how far back this model\'s layers can look.', 'Most layers only see the last {window} tokens; only every 6th layer sees everything.', 'Pick the type that slides a short window along the text.'],
+      alternating: ['Think about how far back this model\'s layers can look.', 'Its layers take turns: one only sees the last {window} tokens, the next sees everything.', 'Pick the type where the window alternates layer by layer.'],
+    },
+    norm: {
+      layernorm: ['This is one of the older designs.', 'Its norm subtracts the average first, then divides by the spread.', 'Pick the original norm, named after the layer it normalizes.'],
+      rmsnorm: ['This is a newer design that prefers cheaper parts.', 'Its norm skips the average and only divides by the root-mean-square.', 'Pick the norm whose name starts with the initials of "root mean square".'],
+    },
+    ffn: {
+      gelu: ['This is one of the older designs, with a simple feed-forward.', 'There\'s no gate: just expand, activate, shrink.', 'Pick the type named after the activation alone, without "GLU".'],
+      swiglu: ['This feed-forward has a gate that decides how much of each lane gets through.', 'The gate uses the SiLU activation, also called Swish.', 'Pick the type that combines Swish with GLU.'],
+      geglu: ['This feed-forward has a gate that decides how much of each lane gets through.', 'The gate uses GELU, not SiLU.', 'Pick the type that combines GELU with GLU.'],
+    },
+    moe: {
+      true: ['Ask: besides the experts the router picks, does every token also get one expert in common?', 'This model stores common knowledge once, in an expert that is always on duty.', 'So on top of the {active} routed experts, 1 more runs for every single token.'],
+      false: ['Ask: besides the experts the router picks, does every token also get one expert in common?', 'Here the router picks every expert. Nothing is always on duty.', 'All {active} active experts are chosen per token, with none extra.'],
+    },
+  };
   const HOME = { tokenizer: 'input', embedding: 'input', posenc: 'input', lmhead: 'output', sampler: 'output' };
   const SUBLAYER = { attention: 1, ffn: 1, moe: 1 };
   const FIELDS = ['variant', 'heads', 'kvHeads', 'rope', 'qkNorm', 'window', 'windowShow', 'sinks', 'hidden', 'experts', 'active', 'shared', 'expertHidden'];
@@ -50,12 +87,6 @@ LLMArcade.workshop = function (api) {
     ],
   };
   const ATT_NAMES = { mha: 'Multi-Head Attention', gqa: 'Grouped-Query Attention', mqa: 'Multi-Query Attention', mla: 'Multi-Head Latent Attention', sliding: 'Sliding Window Attention', alternating: 'Alternating Window Attention' };
-  const CLUE = {
-    attention: { mha: 'Every query head has its own K and V.', gqa: 'Its query heads share a smaller set of K/V heads.', mqa: 'All its query heads share one K/V head.', mla: 'It squeezes K and V into a small latent before caching.', sliding: 'Most of its layers only look at a recent window of tokens.', alternating: 'Every other layer only looks at a short window.' },
-    norm: { layernorm: 'It uses the original norm that subtracts the mean first.', rmsnorm: 'It uses the cheaper norm that skips the mean.' },
-    ffn: { gelu: 'Its feed-forward is the plain, ungated kind.', swiglu: 'Its feed-forward is gated, with SiLU.', geglu: 'Its feed-forward is gated, with GELU.' },
-    moe: { true: 'It keeps one shared expert that every token uses.', false: 'It has no always-on shared expert.' },
-  };
   const STEPS = {
     vocab: [32000, 50257, 100278, 128256, 151936, 163840, 201088, 262144],
     d: [256, 512, 768, 1024, 2048, 2880, 4096, 5120, 5376, 7168, 8192, 12288],
@@ -345,10 +376,32 @@ LLMArcade.workshop = function (api) {
     }
     if (pr.s === 'flavor') {
       const f = keyField(q.kind);
-      return { tone: 'warn', text: `${slot}: right part! But ${n} uses a different type of ${title(q.kind)}. ${CLUE[q.kind][String(t[f])] || ''} Select it and change its ${f === 'shared' ? 'SHARED EXPERT switch' : 'TYPE'}.`, uid: q.uid };
+      return { tone: 'warn', text: `${slot}: right part! But ${n} uses a different type of ${title(q.kind)}. Select it and change its ${f === 'shared' ? 'SHARED EXPERT switch' : 'TYPE'}, or press HINT.`, uid: q.uid };
     }
-    const seen = st.revealed.has(pr.zi + ':' + pr.i);
-    return { tone: 'info', text: `Next: ${slot}. Its job: "${JOB[t.kind]}"${seen ? ` (Hint: it's the ${title(t.kind)}.)` : ' Which part from the bin does that?'}` };
+    return { tone: 'info', text: `Next: ${slot}. Its job: "${JOB[t.kind]}" Which part from the bin does that?` };
+  }
+  // hints belong to one problem at one slot; fixing it (or moving on) starts a fresh ladder
+  const hintKey = (pr) => `${pr.zi}:${pr.i}:${pr.s === 'ghost' || pr.s === 'wrong' ? 'part' : pr.s}`;
+  function ladder(pr) {
+    const t = st.target.zones[pr.zi].pieces[pr.i], q = st.build.zones[pr.zi].pieces[pr.i];
+    const fill = (x) => x.replace(/\{(\w+)\}/g, (_, k) => num({ heads: t.heads, kv: t.kvHeads, window: t.window, active: t.active }[k]));
+    if (pr.s === 'extra') return {
+      nudges: [`Count this room's parts against the blueprint: one of them doesn't belong in ${st.bpModel.name}.`, 'Look for the part marked with a red "!" near the end of the room.', 'Every part before it is right. This one is surplus, so the fix is to take something away.'],
+      answer: `Remove the ${title(q.kind)} (drag it to the bin, or select it and press REMOVE).`,
+    };
+    if (pr.s === 'flavor') {
+      const f = keyField(t.kind), v = String(t[f]);
+      return {
+        nudges: ((FLAVOR_HINTS[t.kind] || {})[v] || ['Compare this part with the same part in the cartridge.', 'Read the description under each TYPE option.', 'Only one option matches this model.']).map(fill),
+        answer: f === 'shared' ? `Turn the SHARED EXPERT switch ${t.shared ? 'ON' : 'OFF'}.` : `Set its TYPE to ${VARIANTS[t.kind].find((x) => x[0] === t[f])[1]}.`,
+      };
+    }
+    return { nudges: HINTS[t.kind], answer: `It's the ${title(t.kind)}.${pr.s === 'wrong' ? ' Swap out the part that is there now.' : ''}` };
+  }
+  function hintLine(pr) {
+    const lv = st.hintLv[hintKey(pr)] || 0; if (!lv) return '';
+    const L = ladder(pr);
+    return lv > 3 ? 'ANSWER: ' + L.answer : `HINT ${lv}/3: ${L.nudges[lv - 1]}`;
   }
 
   // ------------------------------------------------------------ state
@@ -367,7 +420,7 @@ LLMArcade.workshop = function (api) {
   function startBlueprint(m) {
     const target = fromModel(m);
     st = {
-      mode: 'bp', bpModel: m, target, undo: [], sel: null, zone: 0, hints: 0, mistakes: 0, revealed: new Set(), done: false, view: 'build', u2o: {},
+      mode: 'bp', bpModel: m, target, undo: [], sel: null, zone: 0, nudges: 0, answers: 0, hintLv: {}, mistakes: 0, revealed: new Set(), done: false, view: 'build', u2o: {},
       build: { d: target.d, vocab: target.vocab, zones: target.zones.map((z) => ({ type: z.type, repeat: z.repeat, label: z.label, pieces: [] })) },
     };
     enter();
@@ -478,7 +531,8 @@ LLMArcade.workshop = function (api) {
   // ------------------------------------------------------------ progress & rewards
   function finishBlueprint() {
     st.done = true;
-    const stars = st.hints === 0 && st.mistakes <= 1 ? 3 : st.hints <= 2 && st.mistakes <= 4 ? 2 : 1;
+    // nudges are cheap, answers are not: 3 stars allows a few nudges but no answers
+    const stars = st.answers === 0 && st.nudges <= 3 && st.mistakes <= 1 ? 3 : st.answers <= 2 && st.mistakes <= 4 ? 2 : 1;
     const W = wsave(), prev = W.bp[st.bpModel.id] || 0;
     W.bp[st.bpModel.id] = Math.max(prev, stars); api.persist();
     sfx.levelup();
@@ -487,7 +541,7 @@ LLMArcade.workshop = function (api) {
     box.innerHTML = `<div class="mbox pbox"><h2>BLUEPRINT COMPLETE!</h2>
       <div class="rank">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
       <p class="qtext" style="text-align:center">You rebuilt ${esc(st.bpModel.name)}.</p>
-      <p style="text-align:center">${st.hints} hint${st.hints === 1 ? '' : 's'} · ${st.mistakes} wrong part${st.mistakes === 1 ? '' : 's'}. ${stars < 3 ? '3 stars: no hints and at most 1 wrong part.' : 'Flawless.'}</p>
+      <p style="text-align:center">${st.nudges} hint${st.nudges === 1 ? '' : 's'} · ${st.answers} answer${st.answers === 1 ? '' : 's'} shown · ${st.mistakes} wrong part${st.mistakes === 1 ? '' : 's'}. ${stars < 3 ? '3 stars: no answers shown, at most 3 hints and 1 wrong part.' : 'Flawless.'}</p>
       <div class="mfoot"><button class="pbtn" data-a="menu">WORKSHOP MENU</button><button class="pbtn" data-a="stay">KEEP LOOKING</button><button class="pbtn gold" data-a="run">&#9654; TEST RUN</button></div></div>`;
     box.onclick = (e) => {
       const a = e.target.closest('[data-a]'); if (!a) return;
@@ -542,7 +596,7 @@ LLMArcade.workshop = function (api) {
   }
   function foreman() {
     if (st.flashMsg) { const m = st.flashMsg; st.flashMsg = null; return m; }
-    if (st.mode === 'bp') return bpForeman(bpEval());
+    if (st.mode === 'bp') { const ev = bpEval(), m = bpForeman(ev), pr = bpProblem(ev); if (pr) m.hint = hintLine(pr); return m; }
     const iss = check(st.build);
     if (iss.length) return { tone: iss[0].lvl, text: iss[0].msg + (iss.length > 1 ? `  (${iss.length - 1} more note${iss.length > 2 ? 's' : ''})` : ''), uid: iss[0].uid };
     return { tone: 'ok', text: tip(st.build, estimate(st.build)) };
@@ -558,7 +612,7 @@ LLMArcade.workshop = function (api) {
 
     let meters = '';
     if (bp) {
-      meters = `<div class="ws-prog"><div class="bar"><i style="width:${(100 * ev.right) / ev.total}%"></i></div><span>${ev.right}/${ev.total} SLOTS</span><span>HINTS ${st.hints}</span><span>MISSES ${st.mistakes}</span></div>`;
+      meters = `<div class="ws-prog"><div class="bar"><i style="width:${(100 * ev.right) / ev.total}%"></i></div><span>${ev.right}/${ev.total} SLOTS</span><span>HINTS ${st.nudges}</span><span>ANSWERS ${st.answers}</span><span>MISSES ${st.mistakes}</span></div>`;
     } else {
       const best = lookalike(b);
       meters = `<div class="ws-meters">
@@ -597,7 +651,7 @@ LLMArcade.workshop = function (api) {
     const nCh = CHALLENGES.filter((c) => W.ch[c.id]).length;
 
     panel.innerHTML = `
-      <div class="ws-foreman ${fm.tone}"><div class="por">F</div><div><div class="nm">FOREMAN</div><div class="tx">${esc(fm.text)}</div></div></div>
+      <div class="ws-foreman ${fm.tone}"><div class="por">F</div><div><div class="nm">FOREMAN</div><div class="tx">${esc(fm.text)}</div>${fm.hint ? `<div class="hx">${esc(fm.hint)}</div>` : ''}</div></div>
       ${meters}
       <div class="ws-zones">${zones}${addZone}</div>
       ${settings}
@@ -605,13 +659,18 @@ LLMArcade.workshop = function (api) {
       ${chList}
       <div class="ws-foot">
         <button class="pbtn gold" data-a="run">&#9654; TEST RUN</button>
-        ${bp ? '<button class="pbtn" data-a="hint">HINT</button>' : `<button class="pbtn ${st.showCh ? 'on' : ''}" data-a="ch">CHALLENGES ${nCh}/${CHALLENGES.length}</button>`}
+        ${bp ? hintButton(ev) : `<button class="pbtn ${st.showCh ? 'on' : ''}" data-a="ch">CHALLENGES ${nCh}/${CHALLENGES.length}</button>`}
         <button class="pbtn" data-a="undo" ${st.undo.length ? '' : 'disabled'}>UNDO</button>
         <button class="pbtn" data-a="menu">MENU</button>
       </div>`;
     syncInset();
   }
   function revealSettings() { const s = panel.querySelector('.ws-set'); if (s && s.scrollIntoView) s.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  function hintButton(ev) {
+    const pr = bpProblem(ev), lv = pr ? st.hintLv[hintKey(pr)] || 0 : 4;
+    const label = !pr ? 'HINT' : lv >= 4 ? 'ANSWER SHOWN' : lv === 3 ? 'SHOW ANSWER' : `HINT ${lv + 1}/3`;
+    return `<button class="pbtn" data-a="hint" ${lv >= 4 ? 'disabled' : ''}>${label}</button>`;
+  }
   function settingsHTML(f, bp) {
     const q = f.q, z = st.build.zones[f.zi], K = KINDS[q.kind];
     const t = bp ? st.target.zones[f.zi].pieces[f.i] : null;
@@ -688,12 +747,11 @@ LLMArcade.workshop = function (api) {
     if (act === 'menu') openMenu();
   });
   function hint() {
-    const ev = bpEval(), pr = bpProblem(ev); if (!pr) return;
-    st.hints++;
-    const t = st.target.zones[pr.zi].pieces[pr.i], slot = `${zoneName(st.build, st.build.zones[pr.zi])}, slot ${pr.i + 1}`;
-    if (pr.s === 'extra') st.flashMsg = { tone: 'info', text: `Hint: ${slot} shouldn't be there at all. Remove it.` };
-    else if (pr.s === 'flavor') { const fk = keyField(t.kind); st.flashMsg = { tone: 'info', text: `Hint: ${slot} should be ${fk === 'shared' ? (t.shared ? 'WITH a shared expert' : 'WITHOUT a shared expert') : 'type ' + VARIANTS[t.kind].find((x) => x[0] === t[fk])[1]}.` }; }
-    else { st.revealed.add(pr.zi + ':' + pr.i); st.flashMsg = { tone: 'info', text: `Hint: ${slot} is the ${title(t.kind)}.${pr.s === 'wrong' ? ' Swap out the part that is there now.' : ''}` }; }
+    const pr = bpProblem(bpEval()); if (!pr) return;
+    const key = hintKey(pr), lv = Math.min(4, (st.hintLv[key] || 0) + 1);
+    st.hintLv[key] = lv;
+    if (lv <= 3) st.nudges++;
+    else { st.answers++; if (pr.s === 'ghost' || pr.s === 'wrong') st.revealed.add(pr.zi + ':' + pr.i); }
     sfx.tick(); render();
   }
 

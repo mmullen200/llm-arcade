@@ -321,3 +321,4 @@ body.ws-run #workshop { display: none; }
   .ws-cols { grid-template-columns: 1fr; }
   .ws-meters b { font-size: 9px; }
 }
+.ws-foreman .hx { margin-top: 6px; padding: 5px 7px; font-size: 19px; line-height: 1; color: var(--ink); background: var(--gold); border: 2px solid var(--ink); }
