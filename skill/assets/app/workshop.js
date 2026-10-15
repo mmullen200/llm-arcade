@@ -120,9 +120,9 @@ LLMArcade.workshop = function (api) {
     return 'modern';
   }
   const FAMILIES = {
-    classic: { name: 'CLASSIC DENSE', desc: 'The 2019 recipe: a learned position table, LayerNorm and a plain GELU feed-forward. Every weight works on every token.' },
-    modern: { name: 'MODERN DENSE', desc: 'Same skeleton, upgraded parts: RoPE instead of a position table, RMSNorm, gated feed-forwards, and shared K/V heads to shrink the cache.' },
-    moe: { name: 'MIXTURE OF EXPERTS', desc: 'Swap the feed-forward for a crowd of experts and a router. Huge total size, but each token only pays for a few experts.' },
+    classic: { name: 'THE ORIGINAL', tech: 'CLASSIC DENSE', desc: 'Where it all started (2019). The simplest design, and the best first build.' },
+    modern: { name: 'THE UPGRADE', tech: 'MODERN DENSE', desc: 'The same basic shape with newer, more efficient parts. Most of today\'s open models look like this.' },
+    moe: { name: 'THE TEAM OF SPECIALISTS', tech: 'MIXTURE OF EXPERTS', desc: 'Instead of one big brain, many small specialists. For each word only a few of them do the work, so a giant model stays fast.' },
   };
   function difficulty(m) {
     const b = fromModel(m), f = features(b);
@@ -798,13 +798,14 @@ LLMArcade.workshop = function (api) {
   // ------------------------------------------------------------ menu
   function openMenu() {
     const W = wsave(), box = $('#modal'); box.hidden = false;
+    const firstTime = !Object.keys(W.bp).length;
     const fams = ['classic', 'modern', 'moe'];
     const models = MODELS.filter(usable);
     const bpList = fams.map((fk) => {
       const ms = models.filter((m) => family(m) === fk); if (!ms.length) return '';
-      return `<h4>${FAMILIES[fk].name}</h4><p class="fam">${esc(FAMILIES[fk].desc)}</p><div class="ws-list">${ms.map((m) => {
+      return `<h4>${FAMILIES[fk].name} <small>${FAMILIES[fk].tech}</small></h4><p class="fam">${esc(FAMILIES[fk].desc)}</p><div class="ws-list">${ms.map((m) => {
         const dif = difficulty(m), got = W.bp[m.id] || 0;
-        return `<button class="pbtn" data-bp="${esc(m.id)}" style="--c:${m.cartColor || '#29adff'}"><span class="nm">${esc(m.name)}</span><span class="dif">${'■'.repeat(dif)}${'□'.repeat(3 - dif)}</span><span class="got">${got ? '★'.repeat(got) + '☆'.repeat(3 - got) : 'NEW'}</span></button>`;
+        return `<button class="pbtn" data-bp="${esc(m.id)}" style="--c:${m.cartColor || '#29adff'}"><span class="nm">${esc(m.name)}</span><span class="dif">${'■'.repeat(dif)}${'□'.repeat(3 - dif)}</span><span class="got">${got ? '★'.repeat(got) + '☆'.repeat(3 - got) : firstTime && m === ms[0] && fk === 'classic' ? 'START HERE' : 'NEW'}</span></button>`;
       }).join('')}</div>`;
     }).join('');
     const remix = fams.map((fk) => {
@@ -812,12 +813,14 @@ LLMArcade.workshop = function (api) {
       return `<div class="ws-list small"><span class="lab">${FAMILIES[fk].name}</span>${ms.map((m) => `<button class="pbtn small" data-remix="${esc(m.id)}">${esc(m.name)}</button>`).join('')}</div>`;
     }).join('');
     box.innerHTML = `<div class="mbox pbox ws-menu"><h2>THE WORKSHOP</h2>
-      <p class="intro">Build an LLM out of the same parts you've been inspecting. Every model is the same kit with different choices: which attention, which norm, where it goes, dense or experts.</p>
+      <p class="intro">An AI language model is a machine made of a handful of parts: one chops your text into pieces, one lets the words look at each other, one does the "thinking" for each word, and one picks the next word. Every model in this arcade uses the same few parts, just arranged and tuned differently. Here you get to put one together yourself.</p>
+      <ol class="ws-how"><li><b>Pick a model</b> to build, or start your own.</li><li><b>Fill the slots</b> from the parts bin. Each empty slot tells you what it does.</li><li><b>Press TEST RUN</b> and watch a word travel through your machine.</li></ol>
+      ${firstTime ? '<p class="ws-new">First time? Start with <b>GPT-2</b> below. It\'s the simplest, and the HINT button will help you through.</p>' : ''}
       <div class="ws-cols">
-        <section><h3>BLUEPRINTS <small>GUIDED</small></h3><p>Rebuild a real model. Each empty slot describes its job; you pick the part that does it, then its type. ■ = difficulty.</p>${bpList}</section>
-        <section><h3>FREE BUILD <small>SANDBOX</small></h3><p>Invent your own. The foreman checks your wiring, the meters show size and memory, and the detector tells you which real model yours looks like.</p>
-          <div class="ws-list"><button class="pbtn gold" data-free="empty">START FROM AN EMPTY LOT</button>${W.last ? '<button class="pbtn" data-free="last">CONTINUE LAST BUILD</button>' : ''}</div>
-          <h4>OR REMIX A CARTRIDGE</h4>${remix}
+        <section><h3>BUILD A REAL MODEL <small>STEP BY STEP</small></h3><p>Like a LEGO set with instructions. Each empty slot describes its job, and you find the part that does it. Stuck? HINT gives you a nudge. <span class="leg">■□□ easy · ■■■ hard</span></p>${bpList}</section>
+        <section><h3>DESIGN YOUR OWN <small>SANDBOX</small></h3><p>No instructions: put the parts together however you like. A foreman tells you if something won't work, meters show how big your model is, and the game tells you which real model yours resembles.</p>
+          <div class="ws-list"><button class="pbtn gold" data-free="empty">START FROM SCRATCH</button>${W.last ? '<button class="pbtn" data-free="last">CONTINUE LAST BUILD</button>' : ''}</div>
+          <h4>OR START FROM A REAL MODEL AND CHANGE IT</h4>${remix}
         </section>
       </div>
       <div class="mfoot"><button class="pbtn" data-a="x">CLOSE</button></div></div>`;
